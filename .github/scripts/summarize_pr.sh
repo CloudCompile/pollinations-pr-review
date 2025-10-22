@@ -57,7 +57,10 @@ else
 
     RAW=$(echo "$RESP" | jq -r 'if (.choices) then (.choices[0].message.content // .choices[0].text // "") else . end' 2>/dev/null || echo "$RESP")
     # strip Markdown code fences and extra text
-    CLEAN=$(echo "$RAW" | sed 's/```json//g;s/```//g' | sed -E 's/^[^{]*({.*})[^}]*$/\1/')
+    CLEAN=$(printf "%s" "$RAW" \
+  | sed 's/```json//g; s/```//g' \
+  | awk 'BEGIN{RS=""; ORS=""} {if (match($0,/\{[[:print:][:space:]]*\}/,m)) print m[0]}' )
+
     # try parse
     if echo "$CLEAN" | jq empty 2>/dev/null; then
       echo "$CLEAN" > "$CACHE_JSON"
