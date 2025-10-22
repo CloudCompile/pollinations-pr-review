@@ -38,49 +38,59 @@ else
   DIFF=$(head -c "$MAX_DIFF_BYTES" /tmp/pr_diff.txt || true)
   [ -z "$DIFF" ] && DIFF="(empty diff)"
 
-  REQUEST_BODY=$(jq -n --arg model "openai" --arg diff "$DIFF" '{
-    model: $model,
-    temperature: 0.4,
-    reasoning_effort: "medium",
-    messages: [
-      {role:"system",content:"You are a senior developer. Reply ONLY with raw JSON. No Markdown, no code fences."},
-      {role:"user",content:"Produce plain JSON with keys: summary (string), breaking_change (boolean), risk (low|medium|high), notes (string). Nothing else."},
-      {role:"user",content:$diff}
-    ]
-  }')
+  # ---- Pollinations request & JSON parsing ------------------------------------
+DIFF=$(head -c "$MAX_DIFF_BYTES" /tmp/pr_diff.txt || true)
+[ -z "$DIFF" ] && DIFF="(empty diff)"
 
-  ATTEMPT=1
-  while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-    echo "Pollinations attempt $ATTEMPT/$MAX_ATTEMPTS"
-    RESP=$(curl -sS -X POST "https://text.pollinations.ai/openai?referrer=${POLLINATIONS_REFERRER}" \
-      -H "Content-Type: application/json" -d "$REQUEST_BODY" || true)
+REQUEST_BODY=$(jq -n --arg model "openai" --arg diff "$DIFF" '{
+  model: $model,
+  temperature: 0.4,
+  reasoning_effort: "medium",
+  messages: [
+    {role:"system",content:"You are a senior developer. Reply ONLY with raw JSON. No Markdown, no code fences."},
+    {role:"user",content:"Produce plain JSON only. It must include all of these keys: summary, breaking_change, risk, notes. The summary must be a short professional description of what changed and why. Do not leave it blank. Do not output Markdown or any text outside the JSON."},
+    {role:"user",content:$diff}
+  ]
+}')
 
-    RAW=$(echo "$RESP" | jq -r 'if (.choices) then (.choices[0].message.content // .choices[0].text // "") else . end' 2>/dev/null || echo "$RESP")
-    # strip Markdown code fences and extra text
-    CLEAN=$(printf "%s" "$RAW" \
-  | sed 's/```json//g; s/```//g' \
-  | awk 'BEGIN{RS=""; ORS=""} {if (match($0,/\{[[:print:][:space:]]*\}/,m)) print m[0]}' )
+ATTEMPT=1
+while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+  echo "Pollinations attempt $ATTEMPT/$MAX_ATTEMPTS"
+  RESP=$(curl -sS -X POST "https://text.pollinations.ai/openai?referrer=${POLLINATIONS_REFERRER}" \
+    -H "Content-Type: application/json" -d "$REQUEST_BODY" || true)
 
-    # try parse
-    if echo "$CLEAN" | jq empty 2>/dev/null; then
-      echo "$CLEAN" > "$CACHE_JSON"
-      SUMMARY=$(echo "$CLEAN" | jq -r '.summary // "No summary."')
-      echo "$SUMMARY" > "$CACHE_SUMMARY"
-      break
-    fi
-    echo "No valid JSON yet. Waiting ${WAIT_SECONDS}s…"
-    sleep "$WAIT_SECONDS"
-    ATTEMPT=$((ATTEMPT+1))
-  done
+  RAW=$(echo "$RESP" | jq -r 'if (.choices) then (.choices[0].message.content // .choices[0].text // "") else . end' 2>/dev/null || echo "$RESP")
 
-  # fallback
-  if [ ! -f "$CACHE_JSON" ]; then
-    echo "{\"summary\":\"PR changes: ${TOTAL} lines across ${FILES} files.\",\"breaking_change\":false,\"risk\":\"low\"}" > "$CACHE_JSON"
-    echo "PR changes: ${TOTAL} lines across ${FILES} files." > "$CACHE_SUMMARY"
+  # Uncomment next two lines if you want to see the raw text in the Action logs
+  # echo "RAW Pollinations reply:"
+  # echo "$RAW"
+
+  CLEAN=$(printf "%s" "$RAW" \
+    | sed 's/```json//g; s/```//g' \
+    | awk 'BEGIN{RS=""; ORS=""} {if (match($0,/\{[[:print:][:space:]]*\}/,m)) print m[0]}' )
+
+  if echo "$CLEAN" | jq empty 2>/dev/null; then
+    echo "✅ Valid JSON received."
+    echo "$CLEAN" > "$CACHE_JSON"
+    SUMMARY=$(echo "$CLEAN" | jq -r '.summary // "No summary."')
+    echo "$SUMMARY" > "$CACHE_SUMMARY"
+    break
   fi
 
-  META_JSON=$(cat "$CACHE_JSON")
-  SUMMARY=$(cat "$CACHE_SUMMARY")
+  echo "No valid JSON yet. Waiting ${WAIT_SECONDS}s…"
+  sleep "$WAIT_SECONDS"
+  ATTEMPT=$((ATTEMPT+1))
+done
+
+# fallback if nothing valid
+if [ ! -f "$CACHE_JSON" ]; then
+  echo "{\"summary\":\"PR changes: ${TOTAL} lines across ${FILES} files.\",\"breaking_change\":false,\"risk\":\"low\"}" > "$CACHE_JSON"
+  echo "PR changes: ${TOTAL} lines across ${FILES} files." > "$CACHE_SUMMARY"
+fi
+
+META_JSON=$(cat "$CACHE_JSON")
+SUMMARY=$(cat "$CACHE_SUMMARY")
+
 fi
 
 RISK=$(echo "$META_JSON" | jq -r '.risk // "medium"')
