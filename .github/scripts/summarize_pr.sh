@@ -39,7 +39,7 @@ else
   DIFF=$(head -c "$MAX_DIFF_BYTES" /tmp/pr_diff.txt || true)
   [ -z "$DIFF" ] && DIFF="(empty diff)"
 
-  REQUEST_BODY=$(jq -n --arg model "openai" --arg diff "$DIFF" '{
+  REQUEST_BODY=$(jq -n --arg model "openai-reasoning" --arg diff "$DIFF" '{
     model: $model,
     temperature: 0.4,
     reasoning_effort: "medium",
