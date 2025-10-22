@@ -41,7 +41,6 @@ else
 
   REQUEST_BODY=$(jq -n --arg model "openai-reasoning" --arg diff "$DIFF" '{
     model: $model,
-    temperature: 0.4,
     reasoning_effort: "medium",
     messages: [
       {role:"system",content:"You are a senior developer who writes concise, professional summaries of pull request code diffs."},
