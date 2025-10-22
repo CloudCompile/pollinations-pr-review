@@ -1,5 +1,5 @@
 name: "Pollinations PR Summary"
-description: "Automatically summarizes pull request diffs using Pollinations.AI and labels PRs with size, risk, and breaking-change. Uses referrer auth (prisimai.github.io)."
+description: "Automatically summarizes pull request diffs using Pollinations.AI and labels PRs with size, risk, and breaking-change."
 author: "You"
 branding:
   icon: "alert-circle"
