@@ -45,7 +45,7 @@ else
     reasoning_effort: "medium",
     messages: [
       {role:"system",content:"You are a senior developer who writes concise, professional summaries of pull request code diffs."},
-      {role:"user",content:"Summarise the following code diff in 2–4 sentences, explaining what changed and why. Keep it technical but easy to understand.\n\n" + $diff}
+      {role:"user",content:"Summarise the following code diff in 2–4 sentences, explaining what changed and why. Keep it technical but easy to understand.\n\n\($diff)"}
     ]
   }')
 
